@@ -1,7 +1,7 @@
 {
     "id": "featherlight",
     "name": "Featherlight",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "minAppVersion": "1.13.0",
     "description": "Enforces character limits on notes, with a live status bar counter showing characters used and remaining.",
     "author": "Julie Sandburg",

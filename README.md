@@ -36,14 +36,14 @@ Until the plugin is available in the community directory, install it manually:
 
 ## Development
 
-The source is plain JavaScript in `src/main.js` — no TypeScript, no framework. To build:
+This is a TypeScript project — `src/main.ts` (plugin) and `src/settings.ts` (settings tab). To build:
 
 ```
 npm install
 npm run build
 ```
 
-This bundles `src/main.js` into `main.js` via esbuild.
+This typechecks with `tsc` and bundles the sources into `main.js` via esbuild.
 
 ## License
 
