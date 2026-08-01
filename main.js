@@ -135,6 +135,29 @@ class FeatherlightSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+    // The folder-list controls use indexed keys ('watchedFolders.0'); resolve
+    // them onto the array. Other keys fall through to the settings object.
+    getControlValue(key) {
+        const match = /^watchedFolders\.(\d+)$/.exec(key);
+        if (match) return this.plugin.settings.watchedFolders[Number(match[1])];
+        return this.plugin.settings[key];
+    }
+
+    async setControlValue(key, value) {
+        const match = /^watchedFolders\.(\d+)$/.exec(key);
+        if (match) {
+            // Store the raw trimmed value. Do NOT normalizePath() here:
+            // normalizePath('') returns '/', which would survive the blank
+            // filter and silently apply the limit everywhere. Paths are
+            // normalized at comparison time instead (see isInWatchedFolder).
+            this.plugin.settings.watchedFolders[Number(match[1])] = String(value).trim();
+        } else {
+            this.plugin.settings[key] = value;
+        }
+        await this.plugin.saveSettings();
+        this.plugin.refreshCounter();
+    }
+
     getSettingDefinitions() {
         const folders = this.plugin.settings.watchedFolders || [];
 
@@ -168,21 +191,13 @@ class FeatherlightSettingTab extends PluginSettingTab {
                 items: folders.map((folder, index) => ({
                     name: `Folder ${index + 1}`,
                     searchable: false,
-                    render: (setting) => {
-                        setting.addText(text => text
-                            .setPlaceholder('e.g. Tweets')
-                            .setValue(folder)
-                            .onChange(async (value) => {
-                                // Store the raw trimmed value. Do NOT normalizePath() here:
-                                // normalizePath('') returns '/', which would survive the
-                                // blank filter and silently apply the limit everywhere.
-                                // Paths are normalized at comparison time instead (see
-                                // isInWatchedFolder).
-                                this.plugin.settings.watchedFolders[index] = value.trim();
-                                await this.plugin.saveSettings();
-                                this.plugin.refreshCounter();
-                            })
-                        );
+                    // Persisted through getControlValue/setControlValue above,
+                    // which map the indexed key onto the watchedFolders array.
+                    // The folder control provides a vault-folder suggester.
+                    control: {
+                        type: 'folder',
+                        key: `watchedFolders.${index}`,
+                        placeholder: 'e.g. Tweets',
                     },
                 })),
             },
