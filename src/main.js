@@ -1,5 +1,5 @@
-const { Plugin, PluginSettingTab, normalizePath } = require('obsidian');
-const { EditorState } = require('@codemirror/state');
+import { Plugin, PluginSettingTab, normalizePath } from 'obsidian';
+import { EditorState } from '@codemirror/state';
 
 const DEFAULT_SETTINGS = {
     limitType: '280',   // '140', '280', or 'custom'
@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = {
     watchedFolders: [], // empty array means "apply everywhere"
 };
 
-class FeatherlightPlugin extends Plugin {
+export default class FeatherlightPlugin extends Plugin {
 
     async onload() {
         await this.loadSettings();
@@ -150,7 +150,8 @@ class FeatherlightSettingTab extends PluginSettingTab {
             // normalizePath('') returns '/', which would survive the blank
             // filter and silently apply the limit everywhere. Paths are
             // normalized at comparison time instead (see isInWatchedFolder).
-            this.plugin.settings.watchedFolders[Number(match[1])] = String(value).trim();
+            this.plugin.settings.watchedFolders[Number(match[1])] =
+                typeof value === 'string' ? value.trim() : '';
         } else {
             this.plugin.settings[key] = value;
         }
@@ -218,8 +219,8 @@ class FeatherlightSettingTab extends PluginSettingTab {
                         desc: 'Choose a Twitter-era preset or define your own.',
                         render: (setting) => {
                             setting.addDropdown(drop => drop
-                                .addOption('140', '140 — Classic Tweet (2006–2017)')
-                                .addOption('280', '280 — Modern Tweet (2017–2022)')
+                                .addOption('140', '140 — classic tweet (2006–2017)')
+                                .addOption('280', '280 — modern tweet (2017–2022)')
                                 .addOption('custom', 'Custom')
                                 .setValue(this.plugin.settings.limitType)
                                 .onChange(async (value) => {
@@ -237,7 +238,7 @@ class FeatherlightSettingTab extends PluginSettingTab {
                         visible: () => this.plugin.settings.limitType === 'custom',
                         render: (setting) => {
                             setting.addText(text => text
-                                .setPlaceholder('e.g. 500')
+                                .setPlaceholder('E.g. 500')
                                 .setValue(String(this.plugin.settings.customLimit))
                                 .onChange(async (value) => {
                                     const num = parseInt(value, 10);
@@ -255,5 +256,3 @@ class FeatherlightSettingTab extends PluginSettingTab {
         ];
     }
 }
-
-module.exports = FeatherlightPlugin;

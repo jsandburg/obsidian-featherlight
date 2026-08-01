@@ -1,0 +1,22 @@
+{
+    "name": "featherlight",
+    "version": "1.0.2",
+    "description": "Enforces character limits on notes, with a live status bar counter showing characters used and remaining.",
+    "main": "main.js",
+    "scripts": {
+        "dev": "node esbuild.config.mjs",
+        "build": "node esbuild.config.mjs production"
+    },
+    "keywords": [
+        "obsidian",
+        "plugin",
+        "featherlight"
+    ],
+    "author": "Julie Sandburg",
+    "license": "MIT",
+    "devDependencies": {
+        "@codemirror/state": "^6.7.1",
+        "esbuild": "0.17.3",
+        "obsidian": "latest"
+    }
+}

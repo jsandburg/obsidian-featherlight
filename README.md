@@ -36,7 +36,14 @@ Until the plugin is available in the community directory, install it manually:
 
 ## Development
 
-Featherlight is intentionally featherweight: `main.js` is plain, readable JavaScript with no build step. Edit it directly and reload Obsidian.
+The source is plain JavaScript in `src/main.js` — no TypeScript, no framework. To build:
+
+```
+npm install
+npm run build
+```
+
+This bundles `src/main.js` into `main.js` via esbuild.
 
 ## License
 
