@@ -15,7 +15,7 @@
     "author": "Julie Sandburg",
     "license": "MIT",
     "devDependencies": {
-        "@codemirror/state": "^6.7.1",
+        "@codemirror/state": "6.5.0",
         "esbuild": "0.17.3",
         "obsidian": "latest"
     }
