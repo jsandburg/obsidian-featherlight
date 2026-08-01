@@ -1,0 +1,13 @@
+/* Featherlight — status bar counter states */
+
+.featherlight-ok {
+  color: var(--color-green);
+}
+
+.featherlight-warning {
+  color: var(--color-orange);
+}
+
+.featherlight-limit {
+  color: var(--color-red);
+}

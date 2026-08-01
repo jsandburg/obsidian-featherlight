@@ -14,8 +14,10 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 
 ## Settings
 
-- **Watched folders** — add folder names exactly as they appear in your vault. The limit and status bar only activate inside them; an empty list applies the limit to every note.
+- **Watched folders** — add folder names exactly as they appear in your vault with the list's **+** control. The limit and status bar only activate inside them; an empty list applies the limit to every note.
 - **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive number.
+
+Settings are built on Obsidian's declarative settings API, so every option shows up in the global settings search.
 
 ## Notes
 
@@ -24,10 +26,12 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 
 ## Installation
 
+Requires Obsidian 1.13.0 or later.
+
 Until the plugin is available in the community directory, install it manually:
 
 1. Create the folder `<your vault>/.obsidian/plugins/featherlight/`
-2. Copy `main.js` and `manifest.json` into it
+2. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/jsandburg/obsidian-featherlight/releases/latest) and copy them into it
 3. Reload Obsidian and enable **Featherlight** under Settings → Community plugins
 
 ## Development
