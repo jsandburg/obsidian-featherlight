@@ -14,7 +14,7 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 
 ## Settings
 
-- **Limited folders** — add a folder with the list's **+** control, then pick it from the suggestions as you type. Only folders that exist in your vault can be saved: a misspelled name (folder names are case-sensitive) shows an error and isn't stored. Subfolders are included. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
+- **Limited folders** — add a folder with the list's **+** control, then pick it from the suggestions as you type. Only folders that exist in your vault can be saved: a misspelled name (folder names are case-sensitive) shows an error and isn't stored. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
 - **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive whole number.
 
 Settings are built on Obsidian's declarative settings API, so every option shows up in the global settings search.

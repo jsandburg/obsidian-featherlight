@@ -1,4 +1,4 @@
-import { Editor, Plugin, TFile, editorInfoField, normalizePath } from "obsidian";
+import { Editor, Plugin, TFile, TFolder, editorInfoField, normalizePath } from "obsidian";
 import { EditorState, Transaction } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
@@ -67,8 +67,15 @@ export default class FeatherlightPlugin extends Plugin {
             })
         );
         this.registerEvent(
-            this.app.vault.on("rename", (file) => {
-                if (file === this.app.workspace.getActiveFile()) this.refreshCounter();
+            this.app.vault.on("rename", async (file, oldPath) => {
+                // Keep limited folders pointing at the same folder after it is
+                // renamed or moved, so it doesn't silently stop being limited
+                if (file instanceof TFolder) {
+                    await this.updateFolderPaths(oldPath, file.path);
+                    this.refreshCounter();
+                } else if (file === this.app.workspace.getActiveFile()) {
+                    this.refreshCounter();
+                }
             })
         );
 
@@ -92,6 +99,28 @@ export default class FeatherlightPlugin extends Plugin {
         return folders.some((folder) =>
             file.path.startsWith(normalizePath(folder.trim()) + "/")
         );
+    }
+
+    /**
+     * Rewrites limited folders after a folder is renamed or moved from oldPath
+     * to newPath. Covers the folder itself and limited folders inside it.
+     */
+    async updateFolderPaths(oldPath: string, newPath: string): Promise<void> {
+        let changed = false;
+        this.settings.watchedFolders = this.settings.watchedFolders.map((folder) => {
+            if (!folder.trim()) return folder; // blank row
+            const path = normalizePath(folder.trim());
+            if (path === oldPath) {
+                changed = true;
+                return newPath;
+            }
+            if (path.startsWith(oldPath + "/")) {
+                changed = true;
+                return newPath + path.slice(oldPath.length);
+            }
+            return folder;
+        });
+        if (changed) await this.saveSettings();
     }
 
     /**
