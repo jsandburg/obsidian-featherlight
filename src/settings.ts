@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, SettingDefinitionItem } from "obsidian";
+import { App, PluginSettingTab, SettingDefinitionItem, normalizePath } from "obsidian";
 import type FeatherlightPlugin from "./main";
 
 export type LimitType = "140" | "280" | "custom";
@@ -61,11 +61,10 @@ export class FeatherlightSettingTab extends PluginSettingTab {
             },
             {
                 type: "list",
-                heading: "Watched folders",
+                heading: "Limited folders",
                 emptyState:
                     "No folders listed — the character limit applies to every note in the " +
-                    "vault. Add a folder (exactly as it appears in your vault, e.g. " +
-                    "\"Tweets\") to limit only the notes inside it.",
+                    "vault. Add a folder (e.g. \"Tweets\") to limit only the notes inside it.",
                 addItem: {
                     name: "Add folder",
                     action: () => {
@@ -90,6 +89,15 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                         type: "folder" as const,
                         key: `watchedFolders.${index}`,
                         placeholder: "e.g. Tweets",
+                        // Runs on every change; only a value that passes is saved,
+                        // so a folder that doesn't exist is never stored
+                        validate: (value: string) => {
+                            const path = value.trim();
+                            if (!path) return; // blank row, ignored until filled in
+                            const folder = this.app.vault.getFolderByPath(normalizePath(path));
+                            if (!folder) return "No folder with this name exists in your vault.";
+                            if (folder.isRoot()) return "To limit every note, leave this list empty.";
+                        },
                     },
                 })),
             },
