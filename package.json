@@ -1,6 +1,6 @@
 {
     "name": "featherlight",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Enforces character limits on notes, with a live status bar counter showing characters used and remaining.",
     "main": "main.js",
     "scripts": {
