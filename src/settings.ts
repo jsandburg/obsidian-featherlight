@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
+import { App, PluginSettingTab, SettingDefinitionItem, normalizePath } from "obsidian";
 import type FeatherlightPlugin from "./main";
 
 export type LimitType = "140" | "280" | "custom";
@@ -61,11 +61,10 @@ export class FeatherlightSettingTab extends PluginSettingTab {
             },
             {
                 type: "list",
-                heading: "Watched folders",
+                heading: "Limited folders",
                 emptyState:
                     "No folders listed — the character limit applies to every note in the " +
-                    "vault. Add a folder (exactly as it appears in your vault, e.g. " +
-                    "\"Tweets\") to limit only the notes inside it.",
+                    "vault. Add a folder (e.g. \"Tweets\") to limit only the notes inside it.",
                 addItem: {
                     name: "Add folder",
                     action: () => {
@@ -90,6 +89,15 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                         type: "folder" as const,
                         key: `watchedFolders.${index}`,
                         placeholder: "e.g. Tweets",
+                        // Runs on every change; only a value that passes is saved,
+                        // so a folder that doesn't exist is never stored
+                        validate: (value: string) => {
+                            const path = value.trim();
+                            if (!path) return; // blank row, ignored until filled in
+                            const folder = this.app.vault.getFolderByPath(normalizePath(path));
+                            if (!folder) return "No folder with this name exists in your vault.";
+                            if (folder.isRoot()) return "To limit every note, leave this list empty.";
+                        },
                     },
                 })),
             },
@@ -109,40 +117,29 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                     {
                         name: "Limit preset",
                         desc: "Choose a Twitter-era preset or define your own.",
-                        render: (setting: Setting) => {
-                            setting.addDropdown((drop) =>
-                                drop
-                                    .addOption("140", "140 — classic tweet (2006–2017)")
-                                    .addOption("280", "280 — modern tweet (2017–2022)")
-                                    .addOption("custom", "Custom")
-                                    .setValue(this.plugin.settings.limitType)
-                                    .onChange(async (value) => {
-                                        this.plugin.settings.limitType = value as LimitType;
-                                        await this.plugin.saveSettings();
-                                        this.update(); // show/hide the custom field
-                                        this.plugin.refreshCounter();
-                                    })
-                            );
+                        control: {
+                            type: "dropdown",
+                            key: "limitType",
+                            options: {
+                                "140": "140 — classic tweet (2006–2017)",
+                                "280": "280 — modern tweet (2017–2022)",
+                                custom: "Custom",
+                            },
                         },
                     },
                     {
                         name: "Custom limit",
-                        desc: "Enter any positive number.",
+                        desc: "Enter any positive whole number.",
                         visible: () => this.plugin.settings.limitType === "custom",
-                        render: (setting: Setting) => {
-                            setting.addText((text) =>
-                                text
-                                    .setPlaceholder("E.g. 500")
-                                    .setValue(String(this.plugin.settings.customLimit))
-                                    .onChange(async (value) => {
-                                        const num = parseInt(value, 10);
-                                        if (!isNaN(num) && num > 0) {
-                                            this.plugin.settings.customLimit = num;
-                                            await this.plugin.saveSettings();
-                                            this.plugin.refreshCounter();
-                                        }
-                                    })
-                            );
+                        control: {
+                            type: "number",
+                            key: "customLimit",
+                            placeholder: "E.g. 500",
+                            min: 1,
+                            step: 1,
+                            defaultValue: DEFAULT_SETTINGS.customLimit,
+                            validate: (value) =>
+                                Number.isInteger(value) ? undefined : "Enter a whole number.",
                         },
                     },
                 ],
