@@ -1,4 +1,4 @@
-import { Editor, Plugin, normalizePath } from "obsidian";
+import { Editor, Plugin, TFile, editorInfoField, normalizePath } from "obsidian";
 import { EditorState, Transaction } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
@@ -15,16 +15,24 @@ export default class FeatherlightPlugin extends Plugin {
 
         // Create the character counter in the bottom status bar
         this.statusBarItem = this.addStatusBarItem();
-        this.updateStatusBar(0);
+        this.app.workspace.onLayoutReady(() => this.refreshCounter());
 
         // Register a CodeMirror extension that blocks new input at the limit.
         // It allows deletions and selections freely — only additive changes are blocked.
         this.registerEditorExtension(
             EditorState.transactionFilter.of((tr: Transaction) => {
                 if (!tr.docChanged) return tr; // selection-only change, always allow
-                if (!this.isInWatchedFolder()) return tr; // outside watched folder, always allow
+                // "set" is Obsidian reloading the note after it changed on disk
+                // (sync, git, another plugin). Blocking it would leave the editor
+                // out of date, and the next save would overwrite those changes.
+                if (tr.isUserEvent("set")) return tr;
 
-                const limit = this.getLimit();
+                // Use the file this editor belongs to, not the active file: the
+                // transaction may come from a background pane or an embed.
+                const file = tr.startState.field(editorInfoField, false)?.file ?? null;
+                if (!this.isInWatchedFolder(file)) return tr; // outside watched folder, always allow
+
+                const limit = this.getLimit(file);
                 const newLength = tr.newDoc.length;
 
                 // If the new content would exceed the limit and it's longer than before, block it
@@ -50,38 +58,50 @@ export default class FeatherlightPlugin extends Plugin {
             })
         );
 
+        // Update the counter when the active note's char-limit property changes
+        // (the metadata cache updates after editor-change has already fired)
+        // or when it is moved into or out of a watched folder
+        this.registerEvent(
+            this.app.metadataCache.on("changed", (file) => {
+                if (file === this.app.workspace.getActiveFile()) this.refreshCounter();
+            })
+        );
+        this.registerEvent(
+            this.app.vault.on("rename", (file) => {
+                if (file === this.app.workspace.getActiveFile()) this.refreshCounter();
+            })
+        );
+
         // Add the Settings tab so users can change the limit
         this.addSettingTab(new FeatherlightSettingTab(this.app, this));
     }
 
     /**
-     * True when the active file is inside any of the watched folders.
+     * True when the file is inside any of the watched folders.
      * If no folders are configured, always returns true so the plugin
      * applies everywhere.
      */
-    isInWatchedFolder(): boolean {
+    isInWatchedFolder(file: TFile | null): boolean {
         const folders = (this.settings.watchedFolders || []).filter((f) => f.trim());
         if (folders.length === 0) return true; // no folders set → apply everywhere
 
-        const activeFile = this.app.workspace.getActiveFile();
-        if (!activeFile) return false;
+        if (!file) return false;
 
         // normalizePath ensures consistent slashes; the trailing slash prevents
         // "Tweets" from matching "Tweets Archive"
         return folders.some((folder) =>
-            activeFile.path.startsWith(normalizePath(folder.trim()) + "/")
+            file.path.startsWith(normalizePath(folder.trim()) + "/")
         );
     }
 
     /**
-     * The character limit currently in effect. A per-note frontmatter property
+     * The character limit in effect for a file. A per-note frontmatter property
      * (char-limit: 500) takes priority over the global setting, so each note
      * can have its own limit.
      */
-    getLimit(): number {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile) {
-            const cache = this.app.metadataCache.getFileCache(activeFile);
+    getLimit(file: TFile | null): number {
+        if (file) {
+            const cache = this.app.metadataCache.getFileCache(file);
             const perNote: unknown = cache?.frontmatter?.["char-limit"];
             if (typeof perNote === "number" && perNote > 0) return perNote;
         }
@@ -97,40 +117,43 @@ export default class FeatherlightPlugin extends Plugin {
      * otherwise it is read from the active editor.
      */
     refreshCounter(charCount?: number): void {
-        if (!this.isInWatchedFolder()) {
+        const active = this.app.workspace.activeEditor;
+        const file = active?.file ?? null;
+        // Hide when no note is being edited (PDF, graph, empty tab…) or the
+        // note is outside the watched folders
+        if (!active?.editor || !this.isInWatchedFolder(file)) {
             this.statusBarItem.hide();
             return;
         }
         this.statusBarItem.show();
-        if (charCount === undefined) {
-            const editor = this.app.workspace.activeEditor?.editor;
-            charCount = editor ? editor.getValue().length : 0;
-        }
-        this.updateStatusBar(charCount);
+        this.updateStatusBar(charCount ?? active.editor.getValue().length, this.getLimit(file));
     }
 
     /** Updates the status bar text and color for the given character count. */
-    updateStatusBar(charCount: number): void {
-        const limit = this.getLimit();
+    updateStatusBar(charCount: number, limit: number): void {
         const remaining = limit - charCount;
 
         // Within 10% of the limit (or the last 10 characters) counts as "warning"
         const warning = remaining <= Math.max(10, Math.floor(limit * 0.1));
 
-        if (remaining === 0) {
+        if (remaining < 0) {
+            // Over the limit (e.g. the limit was lowered) — trim to continue
+            this.statusBarItem.setText(`✦ ${charCount}/${limit} · ${-remaining} over`);
+        } else if (remaining === 0) {
             // Exactly at the limit — hard stop message
             this.statusBarItem.setText(`✦ ${charCount}/${limit} · limit reached`);
         } else {
             this.statusBarItem.setText(`✦ ${charCount}/${limit} · ${remaining} left`);
         }
-        this.statusBarItem.toggleClass("featherlight-ok", remaining !== 0 && !warning);
-        this.statusBarItem.toggleClass("featherlight-warning", remaining !== 0 && warning);
-        this.statusBarItem.toggleClass("featherlight-limit", remaining === 0);
+        this.statusBarItem.toggleClass("featherlight-ok", remaining > 0 && !warning);
+        this.statusBarItem.toggleClass("featherlight-warning", remaining > 0 && warning);
+        this.statusBarItem.toggleClass("featherlight-limit", remaining <= 0);
     }
 
     async loadSettings() {
         const data = (await this.loadData()) as Partial<FeatherlightSettings> | null;
-        this.settings = { ...DEFAULT_SETTINGS, ...data };
+        // Copy the default array so pushing a folder never mutates DEFAULT_SETTINGS
+        this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], ...data };
     }
 
     async saveSettings() {

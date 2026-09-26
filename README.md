@@ -7,7 +7,7 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 ## Features
 
 - **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under.
-- **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop.
+- **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop (or `· 12 over` if the note is already past it).
 - **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
 - **Per-note override** — add `char-limit: 500` (any positive number) to a note's YAML frontmatter to give that note its own limit. The per-note value always beats the global setting.
 - **Watched folders** — optionally scope the limit and counter to specific folders (e.g. `Tweets`). Outside them, notes behave normally and the counter hides. Leave the list empty to apply the limit everywhere.
@@ -23,6 +23,8 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 
 - Characters include spaces and punctuation — the count is the raw length of the note, frontmatter included.
 - The limit only blocks *typing and pasting past it*. Notes that already exceed the limit (created before the plugin, or moved into a watched folder) aren't truncated — you just can't add more until you trim them below the limit.
+- On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced.
+- Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
 
 ## Installation
 
@@ -44,6 +46,12 @@ npm run build
 ```
 
 This typechecks with `tsc` and bundles the sources into `main.js` via esbuild.
+
+To check the sources against Obsidian's plugin guidelines (the same rules the community review uses):
+
+```
+npm run lint
+```
 
 ## License
 
