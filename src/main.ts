@@ -1,5 +1,6 @@
 import {
     Editor,
+    Notice,
     Plugin,
     TFile,
     TFolder,
@@ -7,7 +8,7 @@ import {
     getFrontMatterInfo,
     normalizePath,
 } from "obsidian";
-import { EditorState, Transaction } from "@codemirror/state";
+import { EditorState, Transaction, TransactionSpec } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
     FeatherlightSettings,
@@ -21,9 +22,14 @@ import {
  */
 const graphemes = new Intl.Segmenter();
 
+/** How long the "limited to" notice waits before it can show again, in ms. */
+const LIMIT_NOTICE_GAP = 5000;
+
 export default class FeatherlightPlugin extends Plugin {
     settings: FeatherlightSettings;
     statusBarItem: HTMLElement;
+    /** When the "limited to" notice last showed (Date.now()). */
+    lastLimitNotice = 0;
 
     async onload() {
         await this.loadSettings();
@@ -33,7 +39,8 @@ export default class FeatherlightPlugin extends Plugin {
         this.app.workspace.onLayoutReady(() => this.refreshCounter());
 
         // Register a CodeMirror extension that blocks new input at the limit.
-        // It allows deletions and selections freely — only additive changes are blocked.
+        // It allows deletions and selections freely — only additive changes are
+        // blocked. A paste or drop that would go over is cut to the part that fits.
         this.registerEditorExtension(
             EditorState.transactionFilter.of((tr: Transaction) => {
                 if (!tr.docChanged) return tr; // selection-only change, always allow
@@ -53,13 +60,28 @@ export default class FeatherlightPlugin extends Plugin {
                 // be over the limit: skip counting it
                 if (tr.newDoc.length <= limit) return tr;
                 const newLength = this.count(tr.newDoc.toString());
+                if (newLength <= limit) return tr;
 
-                // If the new content would exceed the limit and it's longer than before, block it
-                if (newLength > limit && newLength > this.count(tr.startState.doc.toString())) {
-                    return []; // returning an empty array cancels the transaction
+                // Over the limit: allow it only if the note isn't getting longer
+                // (e.g. trimming a note that was already over a lowered limit)
+                const max = Math.max(limit, this.count(tr.startState.doc.toString()));
+                if (newLength <= max) return tr;
+
+                // Cutting typing or an autocomplete would leave half a word or
+                // link, so only pastes and drops are cut to fit
+                const fitted =
+                    tr.isUserEvent("input.paste") || tr.isUserEvent("input.drop")
+                        ? this.fitInsertion(tr, max)
+                        : null;
+                if (fitted) {
+                    new Notice(
+                        `Only ${fitted.kept} of ${fitted.total} characters fit. ` +
+                        `This note is limited to ${limit} characters.`
+                    );
+                    return fitted.spec;
                 }
-
-                return tr;
+                this.showLimitNotice(limit);
+                return []; // returning an empty array cancels the transaction
             })
         );
 
@@ -160,6 +182,63 @@ export default class FeatherlightPlugin extends Plugin {
         this.settings.watchedFolders = update(this.settings.watchedFolders);
         this.settings.excludedFolders = update(this.settings.excludedFolders);
         if (changed) await this.saveSettings();
+    }
+
+    /**
+     * For a transaction that inserts text in one place, a replacement that
+     * inserts only as much of the start of that text as keeps the note within
+     * max characters, cut at a whole character. Null when the transaction
+     * changes more than one place or none of the text fits.
+     */
+    fitInsertion(
+        tr: Transaction,
+        max: number
+    ): { spec: TransactionSpec; kept: number; total: number } | null {
+        const changes: { from: number; to: number; text: string }[] = [];
+        tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+            changes.push({ from, to, text: inserted.toString() });
+        });
+        if (changes.length !== 1) return null;
+
+        const { from, to, text } = changes[0];
+        const chars = Array.from(graphemes.segment(text), ({ segment }) => segment);
+        const before = tr.startState.doc.sliceString(0, from);
+        const after = tr.startState.doc.sliceString(to);
+        const fits = (n: number) =>
+            this.count(before + chars.slice(0, n).join("") + after) <= max;
+
+        // Binary search for the most characters that fit; all of them don't
+        let low = 0;
+        let high = chars.length - 1;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (fits(mid)) low = mid;
+            else high = mid - 1;
+        }
+        if (low === 0) return null;
+
+        const insert = chars.slice(0, low).join("");
+        return {
+            spec: {
+                changes: { from, to, insert },
+                selection: { anchor: from + insert.length },
+                userEvent: tr.annotation(Transaction.userEvent),
+                scrollIntoView: true,
+            },
+            kept: low,
+            total: chars.length,
+        };
+    }
+
+    /**
+     * Says why typing stopped. Shown at most once per LIMIT_NOTICE_GAP, so
+     * holding a key at the limit doesn't stack notices.
+     */
+    showLimitNotice(limit: number): void {
+        const now = Date.now();
+        if (now - this.lastLimitNotice < LIMIT_NOTICE_GAP) return;
+        this.lastLimitNotice = now;
+        new Notice(`This note is limited to ${limit} characters.`);
     }
 
     /**

@@ -6,7 +6,8 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 
 ## Features
 
-- **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under.
+- **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under. A notice says why when typing stops.
+- **Pastes are cut to fit** — pasting or dropping more text than the note has room for inserts the part that fits, cut at a whole character, and a notice says how much made it in. Typing and autocomplete are never cut, so you won't end up with half a word or link.
 - **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop (or `· 12 over` if the note is already past it).
 - **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
 - **Per-note override** — add `char-limit: 500` (any positive number) to a note's YAML frontmatter to give that note its own limit. The per-note value always beats the global setting.
@@ -26,7 +27,7 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 
 - Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
 - The limit only blocks *typing and pasting past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
-- On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced.
+- On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced, and the notice still tells you when you hit it.
 - Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
 
 ## Installation
