@@ -18,6 +18,8 @@ export interface FeatherlightSettings {
     watchedFolders: string[];
     /** Never limited, even inside a limited folder. */
     excludedFolders: string[];
+    /** Whether the frontmatter block counts toward the limit. */
+    countProperties: boolean;
 }
 
 /** The settings keys that hold a list of folders. */
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: FeatherlightSettings = {
     customLimit: 500,
     watchedFolders: [],
     excludedFolders: [],
+    countProperties: true,
 };
 
 export class FeatherlightSettingTab extends PluginSettingTab {
@@ -127,6 +130,14 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                             validate: (value) =>
                                 Number.isInteger(value) ? undefined : "Enter a whole number.",
                         },
+                    },
+                    {
+                        name: "Count properties",
+                        desc:
+                            "Include the note's properties (its YAML frontmatter) in the count. " +
+                            "Turn this off so properties, including char-limit itself, don't " +
+                            "use up the limit.",
+                        control: { type: "toggle", key: "countProperties" },
                     },
                 ],
             },

@@ -1,4 +1,12 @@
-import { Editor, Plugin, TFile, TFolder, editorInfoField, normalizePath } from "obsidian";
+import {
+    Editor,
+    Plugin,
+    TFile,
+    TFolder,
+    editorInfoField,
+    getFrontMatterInfo,
+    normalizePath,
+} from "obsidian";
 import { EditorState, Transaction } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
@@ -40,8 +48,9 @@ export default class FeatherlightPlugin extends Plugin {
                 if (!this.isLimited(file)) return tr; // outside the limited folders, always allow
 
                 const limit = this.getLimit(file);
-                // A character is at least one UTF-16 code unit, so a note this
-                // short can't be over the limit: skip counting it
+                // A character is at least one UTF-16 code unit, and skipping
+                // properties only lowers the count, so a note this short can't
+                // be over the limit: skip counting it
                 if (tr.newDoc.length <= limit) return tr;
                 const newLength = this.count(tr.newDoc.toString());
 
@@ -153,9 +162,16 @@ export default class FeatherlightPlugin extends Plugin {
         if (changed) await this.saveSettings();
     }
 
-    /** The number of characters in text, as the limit counts them. */
+    /**
+     * The number of characters in text, as the limit counts them. With
+     * countProperties off, the frontmatter block is skipped. It's found in
+     * the text itself, so it's right even before the metadata cache updates.
+     */
     count(text: string): number {
-        return Array.from(graphemes.segment(text)).length;
+        const counted = this.settings.countProperties
+            ? text
+            : text.slice(getFrontMatterInfo(text).contentStart);
+        return Array.from(graphemes.segment(counted)).length;
     }
 
     /**

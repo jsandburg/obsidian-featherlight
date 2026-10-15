@@ -18,12 +18,13 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 - **Limited folders** — add a folder with the list's **+** control, then pick it from the suggestions as you type. Only folders that exist in your vault can be saved: a misspelled name (folder names are case-sensitive) shows an error and isn't stored. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
 - **Excluded folders** — added and checked the same way as limited folders, and also kept up to date through renames and moves. Notes inside them are never limited and the counter hides, even when the folder sits inside a limited folder or a note has its own `char-limit`.
 - **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive whole number.
+- **Count properties** — on by default. Turn it off to leave a note's properties (its YAML frontmatter, `char-limit` included) out of the count, so only the note's body uses up the limit. You can still add and edit properties in a note that's at its limit.
 
 Settings are built on Obsidian's declarative settings API, so every option shows up in the global settings search.
 
 ## Notes
 
-- Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so does frontmatter.
+- Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
 - The limit only blocks *typing and pasting past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
 - On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced.
 - Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
