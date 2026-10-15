@@ -6,6 +6,13 @@ import {
     FeatherlightSettingTab,
 } from "./settings";
 
+/**
+ * Splits text into user-perceived characters (graphemes), so an emoji built
+ * from several code points — 👨‍👩‍👧, 👍🏽, ❤️, a flag — or a letter with a
+ * combining accent counts as one character.
+ */
+const graphemes = new Intl.Segmenter();
+
 export default class FeatherlightPlugin extends Plugin {
     settings: FeatherlightSettings;
     statusBarItem: HTMLElement;
@@ -33,10 +40,13 @@ export default class FeatherlightPlugin extends Plugin {
                 if (!this.isLimited(file)) return tr; // outside the limited folders, always allow
 
                 const limit = this.getLimit(file);
-                const newLength = tr.newDoc.length;
+                // A character is at least one UTF-16 code unit, so a note this
+                // short can't be over the limit: skip counting it
+                if (tr.newDoc.length <= limit) return tr;
+                const newLength = this.count(tr.newDoc.toString());
 
                 // If the new content would exceed the limit and it's longer than before, block it
-                if (newLength > limit && newLength > tr.startState.doc.length) {
+                if (newLength > limit && newLength > this.count(tr.startState.doc.toString())) {
                     return []; // returning an empty array cancels the transaction
                 }
 
@@ -47,7 +57,7 @@ export default class FeatherlightPlugin extends Plugin {
         // Update the counter whenever the note content changes
         this.registerEvent(
             this.app.workspace.on("editor-change", (editor: Editor) => {
-                this.refreshCounter(editor.getValue().length);
+                this.refreshCounter(this.count(editor.getValue()));
             })
         );
 
@@ -143,6 +153,11 @@ export default class FeatherlightPlugin extends Plugin {
         if (changed) await this.saveSettings();
     }
 
+    /** The number of characters in text, as the limit counts them. */
+    count(text: string): number {
+        return Array.from(graphemes.segment(text)).length;
+    }
+
     /**
      * The character limit in effect for a file. A per-note frontmatter property
      * (char-limit: 500) takes priority over the global setting, so each note
@@ -175,7 +190,7 @@ export default class FeatherlightPlugin extends Plugin {
             return;
         }
         this.statusBarItem.show();
-        this.updateStatusBar(charCount ?? active.editor.getValue().length, this.getLimit(file));
+        this.updateStatusBar(charCount ?? this.count(active.editor.getValue()), this.getLimit(file));
     }
 
     /** Updates the status bar text and color for the given character count. */

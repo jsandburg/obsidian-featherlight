@@ -23,7 +23,7 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 
 ## Notes
 
-- Characters include spaces and punctuation — the count is the raw length of the note, frontmatter included.
+- Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so does frontmatter.
 - The limit only blocks *typing and pasting past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
 - On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced.
 - Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
