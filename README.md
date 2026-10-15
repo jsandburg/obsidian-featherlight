@@ -11,10 +11,12 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 - **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
 - **Per-note override** — add `char-limit: 500` (any positive number) to a note's YAML frontmatter to give that note its own limit. The per-note value always beats the global setting.
 - **Limited folders** — optionally scope the limit and counter to specific folders (e.g. `Tweets`). Outside them, notes behave normally and the counter hides. Leave the list empty to apply the limit everywhere.
+- **Excluded folders** — lift the limit from specific folders (e.g. `Drafts`), even inside a limited folder, so you can limit everywhere except a few folders, or limit a folder except one of its subfolders.
 
 ## Settings
 
 - **Limited folders** — add a folder with the list's **+** control, then pick it from the suggestions as you type. Only folders that exist in your vault can be saved: a misspelled name (folder names are case-sensitive) shows an error and isn't stored. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
+- **Excluded folders** — added and checked the same way as limited folders, and also kept up to date through renames and moves. Notes inside them are never limited and the counter hides, even when the folder sits inside a limited folder or a note has its own `char-limit`.
 - **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive whole number.
 
 Settings are built on Obsidian's declarative settings API, so every option shows up in the global settings search.

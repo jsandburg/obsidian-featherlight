@@ -30,7 +30,7 @@ export default class FeatherlightPlugin extends Plugin {
                 // Use the file this editor belongs to, not the active file: the
                 // transaction may come from a background pane or an embed.
                 const file = tr.startState.field(editorInfoField, false)?.file ?? null;
-                if (!this.isInWatchedFolder(file)) return tr; // outside watched folder, always allow
+                if (!this.isLimited(file)) return tr; // outside the limited folders, always allow
 
                 const limit = this.getLimit(file);
                 const newLength = tr.newDoc.length;
@@ -68,8 +68,9 @@ export default class FeatherlightPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.vault.on("rename", async (file, oldPath) => {
-                // Keep limited folders pointing at the same folder after it is
-                // renamed or moved, so it doesn't silently stop being limited
+                // Keep limited and excluded folders pointing at the same folder
+                // after it is renamed or moved, so the setting doesn't silently
+                // stop applying to it
                 if (file instanceof TFolder) {
                     await this.updateFolderPaths(oldPath, file.path);
                     this.refreshCounter();
@@ -101,13 +102,30 @@ export default class FeatherlightPlugin extends Plugin {
         );
     }
 
+    /** True when the file is inside any of the excluded folders. */
+    isInExcludedFolder(file: TFile | null): boolean {
+        if (!file) return false;
+        return this.settings.excludedFolders
+            .filter((f) => f.trim())
+            .some((folder) => file.path.startsWith(normalizePath(folder.trim()) + "/"));
+    }
+
     /**
-     * Rewrites limited folders after a folder is renamed or moved from oldPath
-     * to newPath. Covers the folder itself and limited folders inside it.
+     * True when the limit applies to the file: it is in a limited folder (or
+     * none are set) and not in an excluded folder. Excluded folders win, so a
+     * subfolder of a limited folder can be excluded.
+     */
+    isLimited(file: TFile | null): boolean {
+        return this.isInWatchedFolder(file) && !this.isInExcludedFolder(file);
+    }
+
+    /**
+     * Rewrites limited and excluded folders after a folder is renamed or moved
+     * from oldPath to newPath. Covers the folder itself and folders inside it.
      */
     async updateFolderPaths(oldPath: string, newPath: string): Promise<void> {
         let changed = false;
-        this.settings.watchedFolders = this.settings.watchedFolders.map((folder) => {
+        const update = (folders: string[]) => folders.map((folder) => {
             if (!folder.trim()) return folder; // blank row
             const path = normalizePath(folder.trim());
             if (path === oldPath) {
@@ -120,6 +138,8 @@ export default class FeatherlightPlugin extends Plugin {
             }
             return folder;
         });
+        this.settings.watchedFolders = update(this.settings.watchedFolders);
+        this.settings.excludedFolders = update(this.settings.excludedFolders);
         if (changed) await this.saveSettings();
     }
 
@@ -149,8 +169,8 @@ export default class FeatherlightPlugin extends Plugin {
         const active = this.app.workspace.activeEditor;
         const file = active?.file ?? null;
         // Hide when no note is being edited (PDF, graph, empty tab…) or the
-        // note is outside the watched folders
-        if (!active?.editor || !this.isInWatchedFolder(file)) {
+        // note is outside the limited folders
+        if (!active?.editor || !this.isLimited(file)) {
             this.statusBarItem.hide();
             return;
         }
@@ -181,8 +201,8 @@ export default class FeatherlightPlugin extends Plugin {
 
     async loadSettings() {
         const data = (await this.loadData()) as Partial<FeatherlightSettings> | null;
-        // Copy the default array so pushing a folder never mutates DEFAULT_SETTINGS
-        this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], ...data };
+        // Copy the default arrays so pushing a folder never mutates DEFAULT_SETTINGS
+        this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], excludedFolders: [], ...data };
     }
 
     async saveSettings() {
