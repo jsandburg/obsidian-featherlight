@@ -9,8 +9,10 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 - **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under. A notice says why when typing stops.
 - **Pastes are cut to fit** — pasting or dropping more text than the note has room for inserts the part that fits, cut at a whole character, and a notice says how much made it in. Typing and autocomplete are never cut, so you won't end up with half a word or link.
 - **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop (or `· 12 over` if the note is already past it).
+- **Counts what you see** — an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's built from several code points.
 - **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
 - **Per-note override** — add `char-limit: 500` (any positive number) to a note's YAML frontmatter to give that note its own limit. The per-note value always beats the global setting.
+- **Leave properties out** — optionally skip a note's properties when counting, so `char-limit`, tags, and other frontmatter don't use up the limit.
 - **Limited folders** — optionally scope the limit and counter to specific folders (e.g. `Tweets`). Outside them, notes behave normally and the counter hides. Leave the list empty to apply the limit everywhere.
 - **Excluded folders** — lift the limit from specific folders (e.g. `Drafts`), even inside a limited folder, so you can limit everywhere except a few folders, or limit a folder except one of its subfolders.
 
@@ -28,7 +30,7 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 - Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
 - The limit only stops a note from *growing past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
 - On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced, and the notice still tells you when you hit it.
-- Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
+- Changes that reach the file from outside the editor (Obsidian Sync, git, another app, or a plugin that writes the file directly) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk. A plugin that edits through the editor is limited the same way typing is.
 
 ## Installation
 
@@ -41,6 +43,16 @@ To install it manually instead:
 1. Create the folder `<your vault>/.obsidian/plugins/featherlight/`
 2. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/jsandburg/obsidian-featherlight/releases/latest) and copy them into it
 3. Reload Obsidian and enable **Featherlight** under Settings → Community plugins
+
+## Changelog
+
+### 1.1.0
+
+- **Excluded folders** — lift the limit from chosen folders, even inside a limited folder.
+- **Characters count as you see them** — an emoji or an accented letter is one character, not two or more.
+- **Count properties** — a new option to leave a note's properties out of the count.
+- **Pastes are cut to fit** — a paste or drop that's too long inserts the part that fits instead of nothing, and a notice says when the limit stops typing.
+- **Folder picker** — folder lists show each folder by its path, and **+** opens a searchable list of your vault's folders.
 
 ## Development
 
@@ -58,6 +70,10 @@ To check the sources against Obsidian's plugin guidelines (the same rules the co
 ```
 npm run lint
 ```
+
+## Acknowledgments
+
+Thanks to [orl0pl](https://github.com/orl0pl), whose [fork](https://github.com/orl0pl/obsidian-featherlight) suggested excluded folders.
 
 ## License
 
