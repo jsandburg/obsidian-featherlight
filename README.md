@@ -26,7 +26,7 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 ## Notes
 
 - Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
-- The limit only blocks *typing and pasting past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
+- The limit only stops a note from *growing past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
 - On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced, and the notice still tells you when you hit it.
 - Changes that arrive from outside the editor (Obsidian Sync, git, other plugins) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk.
 
@@ -34,7 +34,9 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 
 Requires Obsidian 1.13.0 or later.
 
-Until the plugin is available in the community directory, install it manually:
+In Obsidian, open **Settings → Community plugins → Browse**, search for **Featherlight**, then select **Install** and **Enable**.
+
+To install it manually instead:
 
 1. Create the folder `<your vault>/.obsidian/plugins/featherlight/`
 2. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/jsandburg/obsidian-featherlight/releases/latest) and copy them into it
