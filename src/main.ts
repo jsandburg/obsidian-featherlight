@@ -1,14 +1,35 @@
-import { Editor, Plugin, TFile, TFolder, editorInfoField, normalizePath } from "obsidian";
-import { EditorState, Transaction } from "@codemirror/state";
+import {
+    Editor,
+    Notice,
+    Plugin,
+    TFile,
+    TFolder,
+    editorInfoField,
+    getFrontMatterInfo,
+    normalizePath,
+} from "obsidian";
+import { EditorState, Transaction, TransactionSpec } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
     FeatherlightSettings,
     FeatherlightSettingTab,
 } from "./settings";
 
+/**
+ * Splits text into user-perceived characters (graphemes), so an emoji built
+ * from several code points — 👨‍👩‍👧, 👍🏽, ❤️, a flag — or a letter with a
+ * combining accent counts as one character.
+ */
+const graphemes = new Intl.Segmenter();
+
+/** How long the "limited to" notice waits before it can show again, in ms. */
+const LIMIT_NOTICE_GAP = 5000;
+
 export default class FeatherlightPlugin extends Plugin {
     settings: FeatherlightSettings;
     statusBarItem: HTMLElement;
+    /** When the "limited to" notice last showed (Date.now()). */
+    lastLimitNotice = 0;
 
     async onload() {
         await this.loadSettings();
@@ -18,7 +39,8 @@ export default class FeatherlightPlugin extends Plugin {
         this.app.workspace.onLayoutReady(() => this.refreshCounter());
 
         // Register a CodeMirror extension that blocks new input at the limit.
-        // It allows deletions and selections freely — only additive changes are blocked.
+        // It allows deletions and selections freely — only additive changes are
+        // blocked. A paste or drop that would go over is cut to the part that fits.
         this.registerEditorExtension(
             EditorState.transactionFilter.of((tr: Transaction) => {
                 if (!tr.docChanged) return tr; // selection-only change, always allow
@@ -30,24 +52,43 @@ export default class FeatherlightPlugin extends Plugin {
                 // Use the file this editor belongs to, not the active file: the
                 // transaction may come from a background pane or an embed.
                 const file = tr.startState.field(editorInfoField, false)?.file ?? null;
-                if (!this.isInWatchedFolder(file)) return tr; // outside watched folder, always allow
+                if (!this.isLimited(file)) return tr; // outside the limited folders, always allow
 
                 const limit = this.getLimit(file);
-                const newLength = tr.newDoc.length;
+                // A character is at least one UTF-16 code unit, and skipping
+                // properties only lowers the count, so a note this short can't
+                // be over the limit: skip counting it
+                if (tr.newDoc.length <= limit) return tr;
+                const newLength = this.count(tr.newDoc.toString());
+                if (newLength <= limit) return tr;
 
-                // If the new content would exceed the limit and it's longer than before, block it
-                if (newLength > limit && newLength > tr.startState.doc.length) {
-                    return []; // returning an empty array cancels the transaction
+                // Over the limit: allow it only if the note isn't getting longer
+                // (e.g. trimming a note that was already over a lowered limit)
+                const max = Math.max(limit, this.count(tr.startState.doc.toString()));
+                if (newLength <= max) return tr;
+
+                // Cutting typing or an autocomplete would leave half a word or
+                // link, so only pastes and drops are cut to fit
+                const fitted =
+                    tr.isUserEvent("input.paste") || tr.isUserEvent("input.drop")
+                        ? this.fitInsertion(tr, max)
+                        : null;
+                if (fitted) {
+                    new Notice(
+                        `Only ${fitted.kept} of ${fitted.total} characters fit. ` +
+                        `This note is limited to ${limit} characters.`
+                    );
+                    return fitted.spec;
                 }
-
-                return tr;
+                this.showLimitNotice(limit);
+                return []; // returning an empty array cancels the transaction
             })
         );
 
         // Update the counter whenever the note content changes
         this.registerEvent(
             this.app.workspace.on("editor-change", (editor: Editor) => {
-                this.refreshCounter(editor.getValue().length);
+                this.refreshCounter(this.count(editor.getValue()));
             })
         );
 
@@ -68,8 +109,9 @@ export default class FeatherlightPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.vault.on("rename", async (file, oldPath) => {
-                // Keep limited folders pointing at the same folder after it is
-                // renamed or moved, so it doesn't silently stop being limited
+                // Keep limited and excluded folders pointing at the same folder
+                // after it is renamed or moved, so the setting doesn't silently
+                // stop applying to it
                 if (file instanceof TFolder) {
                     await this.updateFolderPaths(oldPath, file.path);
                     this.refreshCounter();
@@ -101,13 +143,30 @@ export default class FeatherlightPlugin extends Plugin {
         );
     }
 
+    /** True when the file is inside any of the excluded folders. */
+    isInExcludedFolder(file: TFile | null): boolean {
+        if (!file) return false;
+        return this.settings.excludedFolders
+            .filter((f) => f.trim())
+            .some((folder) => file.path.startsWith(normalizePath(folder.trim()) + "/"));
+    }
+
     /**
-     * Rewrites limited folders after a folder is renamed or moved from oldPath
-     * to newPath. Covers the folder itself and limited folders inside it.
+     * True when the limit applies to the file: it is in a limited folder (or
+     * none are set) and not in an excluded folder. Excluded folders win, so a
+     * subfolder of a limited folder can be excluded.
+     */
+    isLimited(file: TFile | null): boolean {
+        return this.isInWatchedFolder(file) && !this.isInExcludedFolder(file);
+    }
+
+    /**
+     * Rewrites limited and excluded folders after a folder is renamed or moved
+     * from oldPath to newPath. Covers the folder itself and folders inside it.
      */
     async updateFolderPaths(oldPath: string, newPath: string): Promise<void> {
         let changed = false;
-        this.settings.watchedFolders = this.settings.watchedFolders.map((folder) => {
+        const update = (folders: string[]) => folders.map((folder) => {
             if (!folder.trim()) return folder; // blank row
             const path = normalizePath(folder.trim());
             if (path === oldPath) {
@@ -120,7 +179,78 @@ export default class FeatherlightPlugin extends Plugin {
             }
             return folder;
         });
+        this.settings.watchedFolders = update(this.settings.watchedFolders);
+        this.settings.excludedFolders = update(this.settings.excludedFolders);
         if (changed) await this.saveSettings();
+    }
+
+    /**
+     * For a transaction that inserts text in one place, a replacement that
+     * inserts only as much of the start of that text as keeps the note within
+     * max characters, cut at a whole character. Null when the transaction
+     * changes more than one place or none of the text fits.
+     */
+    fitInsertion(
+        tr: Transaction,
+        max: number
+    ): { spec: TransactionSpec; kept: number; total: number } | null {
+        const changes: { from: number; to: number; text: string }[] = [];
+        tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+            changes.push({ from, to, text: inserted.toString() });
+        });
+        if (changes.length !== 1) return null;
+
+        const { from, to, text } = changes[0];
+        const chars = Array.from(graphemes.segment(text), ({ segment }) => segment);
+        const before = tr.startState.doc.sliceString(0, from);
+        const after = tr.startState.doc.sliceString(to);
+        const fits = (n: number) =>
+            this.count(before + chars.slice(0, n).join("") + after) <= max;
+
+        // Binary search for the most characters that fit; all of them don't
+        let low = 0;
+        let high = chars.length - 1;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (fits(mid)) low = mid;
+            else high = mid - 1;
+        }
+        if (low === 0) return null;
+
+        const insert = chars.slice(0, low).join("");
+        return {
+            spec: {
+                changes: { from, to, insert },
+                selection: { anchor: from + insert.length },
+                userEvent: tr.annotation(Transaction.userEvent),
+                scrollIntoView: true,
+            },
+            kept: low,
+            total: chars.length,
+        };
+    }
+
+    /**
+     * Says why typing stopped. Shown at most once per LIMIT_NOTICE_GAP, so
+     * holding a key at the limit doesn't stack notices.
+     */
+    showLimitNotice(limit: number): void {
+        const now = Date.now();
+        if (now - this.lastLimitNotice < LIMIT_NOTICE_GAP) return;
+        this.lastLimitNotice = now;
+        new Notice(`This note is limited to ${limit} characters.`);
+    }
+
+    /**
+     * The number of characters in text, as the limit counts them. With
+     * countProperties off, the frontmatter block is skipped. It's found in
+     * the text itself, so it's right even before the metadata cache updates.
+     */
+    count(text: string): number {
+        const counted = this.settings.countProperties
+            ? text
+            : text.slice(getFrontMatterInfo(text).contentStart);
+        return Array.from(graphemes.segment(counted)).length;
     }
 
     /**
@@ -149,13 +279,13 @@ export default class FeatherlightPlugin extends Plugin {
         const active = this.app.workspace.activeEditor;
         const file = active?.file ?? null;
         // Hide when no note is being edited (PDF, graph, empty tab…) or the
-        // note is outside the watched folders
-        if (!active?.editor || !this.isInWatchedFolder(file)) {
+        // note is outside the limited folders
+        if (!active?.editor || !this.isLimited(file)) {
             this.statusBarItem.hide();
             return;
         }
         this.statusBarItem.show();
-        this.updateStatusBar(charCount ?? active.editor.getValue().length, this.getLimit(file));
+        this.updateStatusBar(charCount ?? this.count(active.editor.getValue()), this.getLimit(file));
     }
 
     /** Updates the status bar text and color for the given character count. */
@@ -181,8 +311,11 @@ export default class FeatherlightPlugin extends Plugin {
 
     async loadSettings() {
         const data = (await this.loadData()) as Partial<FeatherlightSettings> | null;
-        // Copy the default array so pushing a folder never mutates DEFAULT_SETTINGS
-        this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], ...data };
+        // Copy the default arrays so pushing a folder never mutates DEFAULT_SETTINGS
+        this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], excludedFolders: [], ...data };
+        // Older versions could save a blank row, which the lists can't show
+        this.settings.watchedFolders = this.settings.watchedFolders.filter((f) => f.trim());
+        this.settings.excludedFolders = this.settings.excludedFolders.filter((f) => f.trim());
     }
 
     async saveSettings() {
