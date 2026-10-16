@@ -1,8 +1,10 @@
 import {
     App,
+    FuzzySuggestModal,
     PluginSettingTab,
     SettingDefinitionItem,
     SettingDefinitionList,
+    TFolder,
     normalizePath,
 } from "obsidian";
 import type FeatherlightPlugin from "./main";
@@ -33,6 +35,34 @@ export const DEFAULT_SETTINGS: FeatherlightSettings = {
     countProperties: true,
 };
 
+/** Lets you pick a vault folder from a searchable list. */
+class FolderPickerModal extends FuzzySuggestModal<TFolder> {
+    /** Paths not to offer, because they're already in the list. */
+    taken: string[];
+    onPick: (folder: TFolder) => void;
+
+    constructor(app: App, placeholder: string, taken: string[], onPick: (folder: TFolder) => void) {
+        super(app);
+        this.taken = taken;
+        this.onPick = onPick;
+        this.setPlaceholder(placeholder);
+    }
+
+    getItems(): TFolder[] {
+        // The vault root isn't offered: limiting it is what an empty limited
+        // list already does, and excluding it would turn the plugin off
+        return this.app.vault.getAllFolders(false).filter((folder) => !this.taken.includes(folder.path));
+    }
+
+    getItemText(folder: TFolder): string {
+        return folder.path;
+    }
+
+    onChooseItem(folder: TFolder): void {
+        this.onPick(folder);
+    }
+}
+
 export class FeatherlightSettingTab extends PluginSettingTab {
     plugin: FeatherlightPlugin;
 
@@ -41,26 +71,12 @@ export class FeatherlightSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
-    // The folder-list controls use indexed keys ("watchedFolders.0"); resolve
-    // them onto the array. Other keys fall through to the settings object.
     getControlValue(key: string): unknown {
-        const match = /^(watchedFolders|excludedFolders)\.(\d+)$/.exec(key);
-        if (match) return this.plugin.settings[match[1] as FolderListKey][Number(match[2])];
         return this.plugin.settings[key as keyof FeatherlightSettings];
     }
 
     async setControlValue(key: string, value: unknown): Promise<void> {
-        const match = /^(watchedFolders|excludedFolders)\.(\d+)$/.exec(key);
-        if (match) {
-            // Store the raw trimmed value. Do NOT normalizePath() here:
-            // normalizePath("") returns "/", which would survive the blank
-            // filter and silently apply the limit everywhere. Paths are
-            // normalized at comparison time instead (see isInWatchedFolder).
-            this.plugin.settings[match[1] as FolderListKey][Number(match[2])] =
-                typeof value === "string" ? value.trim() : "";
-        } else {
-            (this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
-        }
+        (this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
         await this.plugin.saveSettings();
         this.plugin.refreshCounter();
     }
@@ -78,8 +94,7 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                 emptyState:
                     "No folders listed — the character limit applies to every note in the " +
                     "vault. Add a folder (e.g. \"Tweets\") to limit only the notes inside it.",
-                placeholder: "e.g. Tweets",
-                rootError: "To limit every note, leave this list empty.",
+                placeholder: "Choose a folder to limit",
             }),
             this.folderList({
                 key: "excludedFolders",
@@ -87,8 +102,7 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                 emptyState:
                     "No folders excluded. Add a folder (e.g. \"Drafts\") to lift the limit " +
                     "from the notes inside it, even when it's inside a limited folder.",
-                placeholder: "e.g. Drafts",
-                rootError: "To turn the limit off everywhere, disable Featherlight instead.",
+                placeholder: "Choose a folder to exclude",
             }),
             {
                 type: "group",
@@ -144,18 +158,25 @@ export class FeatherlightSettingTab extends PluginSettingTab {
         ];
     }
 
-    /** A list of vault folders stored under the given settings key. */
+    /**
+     * A list of vault folders stored under the given settings key. Each row is
+     * the folder's path; the add button opens a picker of the vault's folders.
+     */
     folderList(options: {
         key: FolderListKey;
         heading: string;
         emptyState: string;
+        /** Shown in the folder picker's search box. */
         placeholder: string;
-        /** Shown when the vault root is picked. */
-        rootError: string;
     }): SettingDefinitionList {
         // Closures read the array from settings each time: renaming a folder
         // replaces it (see updateFolderPaths), so a captured copy goes stale.
         const folders = () => this.plugin.settings[options.key];
+        const changed = () => {
+            void this.plugin.saveSettings();
+            this.update();
+            this.plugin.refreshCounter();
+        };
 
         return {
             type: "list",
@@ -164,37 +185,25 @@ export class FeatherlightSettingTab extends PluginSettingTab {
             addItem: {
                 name: "Add folder",
                 action: () => {
-                    folders().push("");
-                    void this.plugin.saveSettings();
-                    this.update();
+                    const taken = folders().map((path) => normalizePath(path));
+                    new FolderPickerModal(this.app, options.placeholder, taken, (folder) => {
+                        folders().push(folder.path);
+                        changed();
+                    }).open();
                 },
             },
             onDelete: (index: number) => {
                 folders().splice(index, 1);
-                void this.plugin.saveSettings();
-                this.update();
-                this.plugin.refreshCounter();
+                changed();
             },
-            items: folders().map((_folder, index) => ({
-                name: `Folder ${index + 1}`,
+            items: folders().map((path) => ({
+                name: path,
+                // A folder that was deleted, or renamed outside Obsidian, stays
+                // listed so you can see it and remove it
+                desc: this.app.vault.getFolderByPath(normalizePath(path))
+                    ? undefined
+                    : "This folder isn't in your vault.",
                 searchable: false,
-                // Persisted through getControlValue/setControlValue above,
-                // which map the indexed key onto the folder array.
-                // The folder control provides a vault-folder suggester.
-                control: {
-                    type: "folder" as const,
-                    key: `${options.key}.${index}`,
-                    placeholder: options.placeholder,
-                    // Runs on every change; only a value that passes is saved,
-                    // so a folder that doesn't exist is never stored
-                    validate: (value: string) => {
-                        const path = value.trim();
-                        if (!path) return; // blank row, ignored until filled in
-                        const folder = this.app.vault.getFolderByPath(normalizePath(path));
-                        if (!folder) return "No folder with this name exists in your vault.";
-                        if (folder.isRoot()) return options.rootError;
-                    },
-                },
             })),
         };
     }

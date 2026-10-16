@@ -313,6 +313,9 @@ export default class FeatherlightPlugin extends Plugin {
         const data = (await this.loadData()) as Partial<FeatherlightSettings> | null;
         // Copy the default arrays so pushing a folder never mutates DEFAULT_SETTINGS
         this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], excludedFolders: [], ...data };
+        // Older versions could save a blank row, which the lists can't show
+        this.settings.watchedFolders = this.settings.watchedFolders.filter((f) => f.trim());
+        this.settings.excludedFolders = this.settings.excludedFolders.filter((f) => f.trim());
     }
 
     async saveSettings() {

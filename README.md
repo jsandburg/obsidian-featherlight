@@ -16,8 +16,8 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 
 ## Settings
 
-- **Limited folders** — add a folder with the list's **+** control, then pick it from the suggestions as you type. Only folders that exist in your vault can be saved: a misspelled name (folder names are case-sensitive) shows an error and isn't stored. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
-- **Excluded folders** — added and checked the same way as limited folders, and also kept up to date through renames and moves. Notes inside them are never limited and the counter hides, even when the folder sits inside a limited folder or a note has its own `char-limit`.
+- **Limited folders** — select the list's **+** control and pick a folder from your vault; it's listed by its path, with a button to remove it. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. A listed folder that's no longer in your vault (deleted, or renamed outside Obsidian) is marked so you can remove it. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
+- **Excluded folders** — added, listed, and kept up to date through renames and moves the same way as limited folders. Notes inside them are never limited and the counter hides, even when the folder sits inside a limited folder or a note has its own `char-limit`.
 - **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive whole number.
 - **Count properties** — on by default. Turn it off to leave a note's properties (its YAML frontmatter, `char-limit` included) out of the count, so only the note's body uses up the limit. You can still add and edit properties in a note that's at its limit.
 
