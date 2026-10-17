@@ -73,7 +73,7 @@ npm run lint
 
 ## Acknowledgments
 
-Thanks to [orl0pl](https://github.com/orl0pl), whose [fork](https://github.com/orl0pl/obsidian-featherlight) suggested excluded folders.
+Thanks to [orl0pl](https://github.com/orl0pl), whose fork suggested excluded folders.
 
 ## License
 
