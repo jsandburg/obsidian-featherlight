@@ -8,7 +8,7 @@ import {
     getFrontMatterInfo,
     normalizePath,
 } from "obsidian";
-import { EditorState, Transaction, TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, Transaction, TransactionSpec } from "@codemirror/state";
 import {
     DEFAULT_SETTINGS,
     FeatherlightSettings,
@@ -27,6 +27,7 @@ const LIMIT_NOTICE_GAP = 5000;
 
 export default class FeatherlightPlugin extends Plugin {
     settings: FeatherlightSettings;
+    settingTab: FeatherlightSettingTab;
     statusBarItem: HTMLElement;
     /** When the "limited to" notice last showed (Date.now()). */
     lastLimitNotice = 0;
@@ -48,11 +49,14 @@ export default class FeatherlightPlugin extends Plugin {
                 // (sync, git, another plugin). Blocking it would leave the editor
                 // out of date, and the next save would overwrite those changes.
                 if (tr.isUserEvent("set")) return tr;
+                // Undo and redo only go back to text the note already had, so
+                // they're allowed even when the note is over a lowered limit.
+                if (tr.isUserEvent("undo") || tr.isUserEvent("redo")) return tr;
 
                 // Use the file this editor belongs to, not the active file: the
                 // transaction may come from a background pane or an embed.
                 const file = tr.startState.field(editorInfoField, false)?.file ?? null;
-                if (!this.isLimited(file)) return tr; // outside the limited folders, always allow
+                if (!this.isLimited(file)) return tr; // no file or outside the limited folders, always allow
 
                 const limit = this.getLimit(file);
                 // A character is at least one UTF-16 code unit, and skipping
@@ -87,7 +91,9 @@ export default class FeatherlightPlugin extends Plugin {
 
         // Update the counter whenever the note content changes
         this.registerEvent(
-            this.app.workspace.on("editor-change", (editor: Editor) => {
+            this.app.workspace.on("editor-change", (editor: Editor, info) => {
+                // Only the active editor's count belongs in the status bar
+                if (info !== this.app.workspace.activeEditor) return;
                 this.refreshCounter(this.count(editor.getValue()));
             })
         );
@@ -114,6 +120,7 @@ export default class FeatherlightPlugin extends Plugin {
                 // stop applying to it
                 if (file instanceof TFolder) {
                     await this.updateFolderPaths(oldPath, file.path);
+                    this.settingTab.update(); // redraw the lists if the tab is open
                     this.refreshCounter();
                 } else if (file === this.app.workspace.getActiveFile()) {
                     this.refreshCounter();
@@ -122,7 +129,8 @@ export default class FeatherlightPlugin extends Plugin {
         );
 
         // Add the Settings tab so users can change the limit
-        this.addSettingTab(new FeatherlightSettingTab(this.app, this));
+        this.settingTab = new FeatherlightSettingTab(this.app, this);
+        this.addSettingTab(this.settingTab);
     }
 
     /**
@@ -154,9 +162,11 @@ export default class FeatherlightPlugin extends Plugin {
     /**
      * True when the limit applies to the file: it is in a limited folder (or
      * none are set) and not in an excluded folder. Excluded folders win, so a
-     * subfolder of a limited folder can be excluded.
+     * subfolder of a limited folder can be excluded. Editors with no file
+     * (canvas cards, for example) are never limited.
      */
     isLimited(file: TFile | null): boolean {
+        if (!file) return false;
         return this.isInWatchedFolder(file) && !this.isInExcludedFolder(file);
     }
 
@@ -185,31 +195,44 @@ export default class FeatherlightPlugin extends Plugin {
     }
 
     /**
-     * For a transaction that inserts text in one place, a replacement that
-     * inserts only as much of the start of that text as keeps the note within
-     * max characters, cut at a whole character. Null when the transaction
-     * changes more than one place or none of the text fits.
+     * For a transaction that inserts text (in one place, or one per cursor), a
+     * replacement that inserts only as much of the start of that text as keeps
+     * the note within max characters, cut at a whole character. Insertions are
+     * filled in document order, so the last cursors may get nothing. Null when
+     * none of the text fits.
      */
     fitInsertion(
         tr: Transaction,
         max: number
     ): { spec: TransactionSpec; kept: number; total: number } | null {
-        const changes: { from: number; to: number; text: string }[] = [];
+        const changes: { from: number; to: number; chars: string[] }[] = [];
         tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
-            changes.push({ from, to, text: inserted.toString() });
+            const chars = Array.from(graphemes.segment(inserted.toString()), ({ segment }) => segment);
+            changes.push({ from, to, chars });
         });
-        if (changes.length !== 1) return null;
+        const total = changes.reduce((sum, c) => sum + c.chars.length, 0);
 
-        const { from, to, text } = changes[0];
-        const chars = Array.from(graphemes.segment(text), ({ segment }) => segment);
-        const before = tr.startState.doc.sliceString(0, from);
-        const after = tr.startState.doc.sliceString(to);
-        const fits = (n: number) =>
-            this.count(before + chars.slice(0, n).join("") + after) <= max;
+        // The first n characters, spread over the insertions in document order
+        const doc = tr.startState.doc;
+        const take = (n: number) =>
+            changes.map(({ from, to, chars }) => {
+                const insert = chars.slice(0, n).join("");
+                n = Math.max(0, n - chars.length);
+                return { from, to, insert };
+            });
+        const fits = (n: number) => {
+            let text = "";
+            let pos = 0;
+            for (const { from, to, insert } of take(n)) {
+                text += doc.sliceString(pos, from) + insert;
+                pos = to;
+            }
+            return this.count(text + doc.sliceString(pos)) <= max;
+        };
 
         // Binary search for the most characters that fit; all of them don't
         let low = 0;
-        let high = chars.length - 1;
+        let high = total - 1;
         while (low < high) {
             const mid = Math.ceil((low + high) / 2);
             if (fits(mid)) low = mid;
@@ -217,16 +240,23 @@ export default class FeatherlightPlugin extends Plugin {
         }
         if (low === 0) return null;
 
-        const insert = chars.slice(0, low).join("");
+        // A cursor after each insertion, at its position in the new document
+        const kept = take(low);
+        let shift = 0;
+        const cursors = kept.map(({ from, to, insert }) => {
+            const cursor = EditorSelection.cursor(from + shift + insert.length);
+            shift += insert.length - (to - from);
+            return cursor;
+        });
         return {
             spec: {
-                changes: { from, to, insert },
-                selection: { anchor: from + insert.length },
+                changes: kept,
+                selection: EditorSelection.create(cursors),
                 userEvent: tr.annotation(Transaction.userEvent),
                 scrollIntoView: true,
             },
             kept: low,
-            total: chars.length,
+            total,
         };
     }
 
@@ -250,7 +280,16 @@ export default class FeatherlightPlugin extends Plugin {
         const counted = this.settings.countProperties
             ? text
             : text.slice(getFrontMatterInfo(text).contentStart);
-        return Array.from(graphemes.segment(counted)).length;
+        // Fast path: text with nothing above U+02FF has no combining marks,
+        // emoji, or surrogate pairs (and no CR to join a CRLF), so every code
+        // unit is one character. Keeps big notes cheap on every keystroke.
+        if (!/[\u0300-\uffff\r]/.test(counted)) return counted.length;
+        let n = 0;
+        for (const segment of graphemes.segment(counted)) {
+            void segment;
+            n++;
+        }
+        return n;
     }
 
     /**
@@ -316,6 +355,11 @@ export default class FeatherlightPlugin extends Plugin {
         // Older versions could save a blank row, which the lists can't show
         this.settings.watchedFolders = this.settings.watchedFolders.filter((f) => f.trim());
         this.settings.excludedFolders = this.settings.excludedFolders.filter((f) => f.trim());
+        // A limit below 1 would block all typing, so never load one
+        const { customLimit } = this.settings;
+        if (!Number.isInteger(customLimit) || customLimit < 1) {
+            this.settings.customLimit = DEFAULT_SETTINGS.customLimit;
+        }
     }
 
     async saveSettings() {

@@ -142,7 +142,9 @@ export class FeatherlightSettingTab extends PluginSettingTab {
                             step: 1,
                             defaultValue: DEFAULT_SETTINGS.customLimit,
                             validate: (value) =>
-                                Number.isInteger(value) ? undefined : "Enter a whole number.",
+                                Number.isInteger(value) && value >= 1
+                                    ? undefined
+                                    : "Enter a whole number of 1 or more.",
                         },
                     },
                     {
