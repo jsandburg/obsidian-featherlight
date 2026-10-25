@@ -7,7 +7,7 @@ Inspired by the succinct nature of tweets: a hard ceiling forces you to think a 
 ## Features
 
 - **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under. A notice says why when typing stops.
-- **Pastes are cut to fit** — pasting or dropping more text than the note has room for inserts the part that fits, cut at a whole character, and a notice says how much made it in. Typing and autocomplete are never cut, so you won't end up with half a word or link.
+- **Pastes are cut to fit** — pasting or dropping more text than the note has room for inserts the part that fits, cut at a whole character, and a notice says how much made it in. With several cursors, the cursors are filled in order. Typing and autocomplete are never cut, so you won't end up with half a word or link.
 - **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop (or `· 12 over` if the note is already past it).
 - **Counts what you see** — an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's built from several code points.
 - **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
@@ -29,6 +29,8 @@ Settings are built on Obsidian's declarative settings API, so every option shows
 
 - Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
 - The limit only stops a note from *growing past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
+- Undo and redo are never blocked, since they only bring back text the note already had.
+- Only notes are limited. Editors without a file behind them, such as canvas text cards, are left alone and the counter hides.
 - On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced, and the notice still tells you when you hit it.
 - Changes that reach the file from outside the editor (Obsidian Sync, git, another app, or a plugin that writes the file directly) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk. A plugin that edits through the editor is limited the same way typing is.
 
@@ -45,6 +47,15 @@ To install it manually instead:
 3. Reload Obsidian and enable **Featherlight** under Settings → Community plugins
 
 ## Changelog
+
+### Unreleased
+
+- **Custom limit must be 1 or more** — a 0 or negative limit, which would block all typing, is rejected in the settings and never loaded.
+- **Undo and redo** are never blocked, even in a note that's over a lowered limit.
+- **Canvas cards** and other editors with no file are no longer limited.
+- **Multi-cursor pastes** are cut to fit instead of being rejected.
+- The settings tab redraws its folder lists when a folder is renamed while it's open.
+- Faster counting on long notes made of plain text.
 
 ### 1.1.0
 
