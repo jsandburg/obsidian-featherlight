@@ -48,7 +48,7 @@ To install it manually instead:
 
 ## Changelog
 
-### Unreleased
+### 1.1.2
 
 - **Custom limit must be 1 or more** — a 0 or negative limit, which would block all typing, is rejected in the settings and never loaded.
 - **Undo and redo** are never blocked, even in a note that's over a lowered limit.
