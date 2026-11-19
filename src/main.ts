@@ -1,5 +1,4 @@
 import {
-    Editor,
     Notice,
     Plugin,
     TFile,
@@ -91,10 +90,10 @@ export default class FeatherlightPlugin extends Plugin {
 
         // Update the counter whenever the note content changes
         this.registerEvent(
-            this.app.workspace.on("editor-change", (editor: Editor, info) => {
+            this.app.workspace.on("editor-change", (_editor, info) => {
                 // Only the active editor's count belongs in the status bar
                 if (info !== this.app.workspace.activeEditor) return;
-                this.refreshCounter(this.count(editor.getValue()));
+                this.refreshCounter();
             })
         );
 
@@ -301,7 +300,7 @@ export default class FeatherlightPlugin extends Plugin {
         if (file) {
             const cache = this.app.metadataCache.getFileCache(file);
             const perNote: unknown = cache?.frontmatter?.["char-limit"];
-            if (typeof perNote === "number" && perNote > 0) return perNote;
+            if (Number.isInteger(perNote) && (perNote as number) > 0) return perNote as number;
         }
         // Fall back to the global setting
         if (this.settings.limitType === "140") return 140;
@@ -311,10 +310,9 @@ export default class FeatherlightPlugin extends Plugin {
 
     /**
      * Shows or hides the counter for the current context and updates its value.
-     * Pass charCount when the caller already knows it (editor-change);
-     * otherwise it is read from the active editor.
+     * The note is only counted when the limit applies to it.
      */
-    refreshCounter(charCount?: number): void {
+    refreshCounter(): void {
         const active = this.app.workspace.activeEditor;
         const file = active?.file ?? null;
         // Hide when no note is being edited (PDF, graph, empty tab…) or the
@@ -324,7 +322,7 @@ export default class FeatherlightPlugin extends Plugin {
             return;
         }
         this.statusBarItem.show();
-        this.updateStatusBar(charCount ?? this.count(active.editor.getValue()), this.getLimit(file));
+        this.updateStatusBar(this.count(active.editor.getValue()), this.getLimit(file));
     }
 
     /** Updates the status bar text and color for the given character count. */
@@ -352,9 +350,14 @@ export default class FeatherlightPlugin extends Plugin {
         const data = (await this.loadData()) as Partial<FeatherlightSettings> | null;
         // Copy the default arrays so pushing a folder never mutates DEFAULT_SETTINGS
         this.settings = { ...DEFAULT_SETTINGS, watchedFolders: [], excludedFolders: [], ...data };
-        // Older versions could save a blank row, which the lists can't show
-        this.settings.watchedFolders = this.settings.watchedFolders.filter((f) => f.trim());
-        this.settings.excludedFolders = this.settings.excludedFolders.filter((f) => f.trim());
+        // Older versions could save a blank row, which the lists can't show,
+        // and a hand-edited or badly synced data.json could hold anything
+        const folders = (value: unknown): string[] =>
+            Array.isArray(value)
+                ? value.filter((f): f is string => typeof f === "string" && f.trim() !== "")
+                : [];
+        this.settings.watchedFolders = folders(this.settings.watchedFolders);
+        this.settings.excludedFolders = folders(this.settings.excludedFolders);
         // A limit below 1 would block all typing, so never load one
         const { customLimit } = this.settings;
         if (!Number.isInteger(customLimit) || customLimit < 1) {
