@@ -62,6 +62,12 @@ To install it manually instead:
 
 ## Changelog
 
+### 1.1.3
+
+- **`char-limit` must be a positive whole number** — a value like `0.5` is ignored and the global limit applies.
+- **Less work while typing** — notes the limit doesn't apply to, such as those in excluded folders, are no longer counted on every keystroke.
+- A damaged settings file no longer stops the plugin from loading.
+
 ### 1.1.2
 
 - **Custom limit must be 1 or more** — a 0 or negative limit, which would block all typing, is rejected in the settings and never loaded.
