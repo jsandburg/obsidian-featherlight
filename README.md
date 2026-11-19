@@ -1,38 +1,52 @@
 # Featherlight
 
-An [Obsidian](https://obsidian.md) plugin that enforces character limits on notes — a live counter in the status bar shows characters used and remaining, and once you hit the limit, the editor simply won't accept more.
+An [Obsidian](https://obsidian.md) plugin that puts a hard character limit on your notes. A counter in the status bar shows how much room is left, and once a note is full, the editor won't accept more.
 
-Inspired by the succinct nature of tweets: a hard ceiling forces you to think a little harder about what to write.
+Inspired by tweets: a ceiling makes you think a little harder about what to write.
 
-## Features
+## How it works
 
-- **Hard limit, not just a counter** — a CodeMirror transaction filter blocks additive edits once the note is at its limit. Deletions and selections always work, so you can edit your way back under. A notice says why when typing stops.
-- **Pastes are cut to fit** — pasting or dropping more text than the note has room for inserts the part that fits, cut at a whole character, and a notice says how much made it in. With several cursors, the cursors are filled in order. Typing and autocomplete are never cut, so you won't end up with half a word or link.
-- **Live status bar counter** — `✦ 231/280 · 49 left`, colored green with plenty of room, orange within 10% of the limit, red at the hard stop (or `· 12 over` if the note is already past it).
-- **Counts what you see** — an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's built from several code points.
-- **Twitter-era presets** — 140 (Classic Tweet, 2006–2017), 280 (Modern Tweet, 2017–2022), or a custom limit of your choosing.
-- **Per-note override** — add `char-limit: 500` (any positive number) to a note's YAML frontmatter to give that note its own limit. The per-note value always beats the global setting.
-- **Leave properties out** — optionally skip a note's properties when counting, so `char-limit`, tags, and other frontmatter don't use up the limit.
-- **Limited folders** — optionally scope the limit and counter to specific folders (e.g. `Tweets`). Outside them, notes behave normally and the counter hides. Leave the list empty to apply the limit everywhere.
-- **Excluded folders** — lift the limit from specific folders (e.g. `Drafts`), even inside a limited folder, so you can limit everywhere except a few folders, or limit a folder except one of its subfolders.
+- **The limit is enforced, not just displayed.** At the limit, typing stops and a notice says why. Deleting and selecting always work, so you can edit your way back under.
+- **Pastes are cut to fit.** Pasting or dropping more text than there's room for inserts the part that fits, and a notice says how much made it in. With several cursors, the cursors are filled in order. Typing and autocomplete are never cut, so you won't end up with half a word or link.
+- **The status bar shows where you stand.** `✦ 231/280 · 49 left` is green with plenty of room, orange within 10% of the limit, and red at the limit (or `· 12 over` if the note is already past it).
+- **Characters count the way you see them.** An emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's built from several code points. Spaces, punctuation, and line breaks count.
 
-## Settings
+## Choosing the limit
 
-- **Limited folders** — select the list's **+** control and pick a folder from your vault; it's listed by its path, with a button to remove it. Subfolders are included, and renaming or moving a limited folder updates the setting automatically. A listed folder that's no longer in your vault (deleted, or renamed outside Obsidian) is marked so you can remove it. The limit and status bar only activate inside these folders; an empty list applies the limit to every note.
-- **Excluded folders** — added, listed, and kept up to date through renames and moves the same way as limited folders. Notes inside them are never limited and the counter hides, even when the folder sits inside a limited folder or a note has its own `char-limit`.
-- **Limit preset** — 140, 280, or Custom; choosing Custom reveals a field for any positive whole number.
-- **Count properties** — on by default. Turn it off to leave a note's properties (its YAML frontmatter, `char-limit` included) out of the count, so only the note's body uses up the limit. You can still add and edit properties in a note that's at its limit.
+Under **Settings → Featherlight**:
 
-Settings are built on Obsidian's declarative settings API, so every option shows up in the global settings search.
+- **Limit preset** — 140 (classic tweet, 2006–2017), 280 (modern tweet, 2017–2022), or Custom, which reveals a field for any positive whole number.
+- **Count properties** — on by default. Turn it off to leave a note's properties (its YAML frontmatter) out of the count, so only the body uses up the limit.
 
-## Notes
+To give one note its own limit, add `char-limit` to its properties:
 
-- Characters are counted the way you see them: an emoji (👍🏽, 👨‍👩‍👧, a flag) or an accented letter is one character, even when it's made of several code points. Spaces, punctuation, and line breaks count, and so do properties (frontmatter) unless you turn off **Count properties**.
-- The limit only stops a note from *growing past it*. Notes that already exceed the limit (created before the plugin, or moved into a limited folder) aren't truncated — you just can't add more until you trim them below the limit.
-- Undo and redo are never blocked, since they only bring back text the note already had.
-- Only notes are limited. Editors without a file behind them, such as canvas text cards, are left alone and the counter hides.
-- On phones, Obsidian hides the status bar, so the counter isn't visible there — the limit is still enforced, and the notice still tells you when you hit it.
-- Changes that reach the file from outside the editor (Obsidian Sync, git, another app, or a plugin that writes the file directly) are never blocked, so the limit can't cause the editor to fall out of step with the file on disk. A plugin that edits through the editor is limited the same way typing is.
+```yaml
+---
+char-limit: 500
+---
+```
+
+Any positive whole number works, and it always beats the global setting.
+
+## Choosing which notes are limited
+
+By default the limit applies to every note in the vault. Two folder lists narrow that down:
+
+- **Limited folders** — when this list has entries, only notes inside those folders (and their subfolders) are limited. Everywhere else, notes behave normally and the counter hides.
+- **Excluded folders** — notes inside these are never limited, even when the folder sits inside a limited folder or the note has its own `char-limit`.
+
+Together they let you limit everything except a few folders, or limit a folder except one of its subfolders.
+
+To add a folder, select the list's **+** control and pick it from your vault. Renaming or moving a listed folder in Obsidian updates the setting automatically. A folder that's no longer in your vault (deleted, or renamed outside Obsidian) stays listed and is marked, so you can remove it.
+
+## Good to know
+
+- **Notes already over the limit aren't truncated.** A note that was written before the plugin, moved into a limited folder, or had its limit lowered keeps its text. You just can't add more until you trim it below the limit.
+- **Undo and redo are never blocked**, since they only bring back text the note already had.
+- **Changes from outside the editor are never blocked.** Obsidian Sync, git, another app, or a plugin that writes the file directly can all push a note over its limit, so the editor never falls out of step with the file on disk.
+- **Other plugins are limited like typing is** when they edit through the editor. The exception is a plugin that replaces the whole note at once (`editor.setValue()`), which Obsidian treats the same as a reload from disk.
+- **Only notes are limited.** Editors with no file behind them, such as canvas text cards, are left alone.
+- **On phones the counter isn't visible**, because Obsidian hides the status bar there. The limit is still enforced and the notice still appears.
 
 ## Installation
 
@@ -47,6 +61,12 @@ To install it manually instead:
 3. Reload Obsidian and enable **Featherlight** under Settings → Community plugins
 
 ## Changelog
+
+### 1.1.3
+
+- **`char-limit` must be a positive whole number** — a value like `0.5` is ignored and the global limit applies.
+- **Less work while typing** — notes the limit doesn't apply to, such as those in excluded folders, are no longer counted on every keystroke.
+- A damaged settings file no longer stops the plugin from loading.
 
 ### 1.1.2
 
@@ -67,20 +87,22 @@ To install it manually instead:
 
 ## Development
 
-This is a TypeScript project — `src/main.ts` (plugin) and `src/settings.ts` (settings tab). To build:
+The plugin is two TypeScript files: `src/main.ts` (the plugin) and `src/settings.ts` (the settings tab).
 
 ```
 npm install
 npm run build
 ```
 
-This typechecks with `tsc` and bundles the sources into `main.js` via esbuild.
-
-To check the sources against Obsidian's plugin guidelines (the same rules the community review uses):
+`npm run build` typechecks with `tsc` and bundles the sources into `main.js` with esbuild. `npm run dev` rebuilds on every change.
 
 ```
 npm run lint
 ```
+
+`npm run lint` checks the sources against Obsidian's plugin guidelines, the same rules the community review uses.
+
+To publish a release, push a tag that matches the version in `manifest.json` (for example `1.1.2`, with no `v`). The release workflow lints, builds, and attaches the three plugin files.
 
 ## Acknowledgments
 

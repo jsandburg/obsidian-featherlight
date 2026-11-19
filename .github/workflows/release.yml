@@ -20,6 +20,15 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Check tag matches manifest version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="$(node -p "require('./manifest.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $tag does not match manifest.json version $version"
+            exit 1
+          fi
+
       - name: Build
         run: |
           npm ci
